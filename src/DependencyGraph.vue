@@ -50,9 +50,9 @@ export default {
     },
     async getData() {
       const params = JSON.stringify({
-        rootDir: "/Users/ba1man/Work/build/unicom/server",
+        rootDir: "D:/git/refactor-service-test/test/depends",
         lang: "java",
-        projectName: "server",
+        projectName: "depends",
       })
       const config = {
         headers: {
