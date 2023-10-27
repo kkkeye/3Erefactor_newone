@@ -8,6 +8,7 @@
 import cytoscape from "cytoscape";
 import fcose from 'cytoscape-fcose'
 import axios from "axios";
+import { vscode } from "./utilities/vscode.ts";
 
 export default {
   name: 'DependencyGraph',
@@ -22,6 +23,18 @@ export default {
   },
   created() {
     this.getEntity()
+  },
+  mounted(){
+    window.addEventListener('message', event => {
+      const message = event.data; // The json data that the extension sent
+      switch (message.command) {
+        case 'setConfig':
+          {
+            console.log(message.configData);
+            break;
+          }
+      }
+    })
   },
   methods: {
     getRelationCategory(cell) {
@@ -68,6 +81,10 @@ export default {
         }
         this.parentIdMap.get(variable["parentId"]).push(variable);
       }
+      vscode.postMessage({//向vscode插件通信
+        command: "hello",
+        text: "Dependendcy analysis finished",
+      })
     },
     async getEntity() {
       await this.getData();

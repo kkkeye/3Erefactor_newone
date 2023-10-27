@@ -12,9 +12,15 @@ module.exports = defineConfig({
     plugins: [
       new MiniCssExtractPlugin({
         filename: `css/[name]-css-out.css`,
+        chunkFilename: `css/[name]-chunk-vendors-out.css`,
         // chunkFilename: `css/[name].${conf.version}.css`
       })
-    ]
+    ],
+    module:{
+      rules:[
+        {test:/\.ts$/,use:'ts-loader'}
+      ]
+    }
   }
 
 })
