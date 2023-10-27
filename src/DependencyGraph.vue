@@ -19,10 +19,12 @@ export default {
       parentIdMap: new Map(),
       entityIdMap: new Map(),
       relations: [],
+      configData:{},
     }
   },
   created() {
-    this.getEntity()
+    // this.getEntity()
+    this.getConfig()
   },
   mounted(){
     window.addEventListener('message', event => {
@@ -31,6 +33,8 @@ export default {
         case 'setConfig':
           {
             console.log(message.configData);
+            this.configData=JSON.parse(message.configData);
+            this.getEntity()
             break;
           }
       }
@@ -63,10 +67,11 @@ export default {
     },
     async getData() {
       const params = JSON.stringify({
-        rootDir: "D:/git/refactor-service-test/test/depends",
+        rootDir: this.configData.projectRoot,
         lang: "java",
-        projectName: "depends",
+        projectName: this.configData.projectName,
       })
+      console.log(params);
       const config = {
         headers: {
           'Content-Type': 'application/json'
@@ -214,6 +219,11 @@ export default {
         }
       });
     },
+    async getConfig(){
+      vscode.postMessage({
+        command:'setConfig'
+      })
+    }
   }
 }
 </script>
