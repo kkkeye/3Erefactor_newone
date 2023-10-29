@@ -34,7 +34,7 @@ export default {
         "projectName": "depends",
     }
     //dependency,target
-    this.type = 'dependency';
+    this.type = 'target';
     this.getEntity()
   },
   mounted() {
@@ -54,6 +54,12 @@ export default {
     })
   },
   methods: {
+    getEntityCategory(node) {
+      if (node["External"] === true) {
+        return "External";
+      }
+      return node["category"];
+    },
     getRelationCategory(cell) {
       for (const key of Object.keys(cell["values"])) {
         if (key === "loc" || key === "bindVar" || key === "modifyAccessible" || key === "invoke" || key === "arguments") {
@@ -63,7 +69,7 @@ export default {
       }
       return undefined;
     },
-    async getRelationsByIds(entityIds) {
+    getRelationsByIds(entityIds) {
       const relations = []
       for (const cell of this.data["cells"]) {
         if (entityIds.has(cell["src"]) && entityIds.has(cell["dest"])) {
@@ -73,7 +79,7 @@ export default {
       return relations;
     },
     //目标模型的cell加一个判断类型，把父子节点的边不显现。
-    async getRelationsByIdsTarget(entityIds) {
+    getRelationsByIdsTarget(entityIds) {
       const relations = []
       for (const cell of this.data["cells"]) {
         if (entityIds.has(cell["src"]) && entityIds.has(cell["dest"])) {
@@ -88,7 +94,7 @@ export default {
       }
       return relations;
     },
-    async getChildrenById(entityId) {
+    getChildrenById(entityId) {
       if (!this.parentIdMap.has(entityId)) {
         return [];
       }
@@ -164,18 +170,28 @@ export default {
     async getEntity() {
       if (this.type == 'dependency') await this.getData();
       else await this.getArchModelData();
-      this.entityRoot = []
-      this.entityRoot.push({group: 'nodes', data: {id: '-1', name: ''}})
-      let _this = this;
-      _this.getChildrenById(-1).then((res) => {
-        res.forEach(node => {
-          _this.entityRoot.push({
-            group: 'nodes',
-            data: {id: node["id"], name: node["name"], parent: '-1', classes: 'center-center'}
-          })
-        })
+      this.entityRoot = [];
+      let edgesParam = new Set();
+      const ref = this;
+      this.entityRoot.push({group: 'nodes', data: {id: -1, name: this.projectName}})
+      this.getChildrenById(-1).forEach((node) => {
+        const cat = ref.getEntityCategory(node);
+        this.entityRoot.push({
+          group: 'nodes',
+          data: {id: node["id"], name: node["name"], parent: -1, classes: 'center-center', category: cat}
+        });
+        edgesParam.add(node["id"]);
       })
-      console.log(_this.entityRoot);
+      ref.getRelationsByIds(edgesParam).forEach((edge) => {
+        const cat = ref.getRelationCategory(edge);
+        if (cat !== 'Contain' && cat !== 'Define') {
+          this.entityRoot.push({
+            group: 'edges',
+            data: {id: edge.id, source: String(edge["src"]), target: String(edge["dest"]), category: cat}
+          });
+        }
+      });
+      console.log("entityRoot: " + ref.entityRoot);
       cytoscape.use(fcose);
       let cy = cytoscape({
         container: document.getElementById('network'),
@@ -185,6 +201,7 @@ export default {
             node.css("width", size);
             node.css("height", size);
           });
+
           // this.layout({name: 'fcose', fit: true, nodeRepulsion: 99999,initialEnergyOnIncremental: 0.1,nestingFactor:0.1, animationEasing: 'ease-out'}).run();
         },
         layout: {
@@ -192,24 +209,40 @@ export default {
           fit: true,
           nodeRepulsion: 99999,
           animationDuration: 300,
-          spacingFactor: 1.8,
-          nodeDimensionsIncludeLabels: false,
+          spacingFactor: 1.2,
+          nodeDimensionsIncludeLabels: true,
+          avoidOverlap: true,
         },
-        // zoomingEnabled: false,
-        // userZoomingEnabled: false,
-        maxZoom: 1,
-        minZoom: 1,
+        zoomingEnabled: false,
+        userZoomingEnabled: false,
+        maxZoom: 2,
+        minZoom: 0.5,
         style: [
           {
             selector: 'node',
-            style: {
+            style:ref.type=='dependency'? {
               'label': 'data(name)',
               'font-size': '14px',
               'background-opacity': 0.6,
               'background-color': '#2B65EC'
+            }: {
+              'label': 'data(name)',
+              'font-size': '14px',
+              'background-opacity': 0.6,
+              'background-color': '#2B65EC',
+              "shape": "cut-rectangle",
             }
           },
-
+          {
+            selector: '[category = "Package"]',
+            style: {
+              'label': 'data(name)',
+              'font-size': '14px',
+              'background-opacity': 0.6,
+              'background-color': '#2B65EC',
+              "shape": "cut-rectangle",
+            }
+          },
           {
             selector: ':parent',
             style: {
@@ -241,31 +274,33 @@ export default {
             }
           }
         ],
-        elements: _this.entityRoot,
+        elements: this.entityRoot,
       });
+      cy.center();
       cy.on('tap', 'node', function (evt) {
         let target = evt.target;
-        console.log(target);
+        console.log("target: " + target);
+        console.dir(target);
         if (target.selected()) {
           target.children().forEach(ele => {
             cy.remove(ele)
           });
+          cy.remove(target);
+          cy.add(target)
         } else {
           let edgesParam = new Set();
-          _this.getChildrenById(Number(target.id())).then((res) => {
-            res.forEach(node => {
-              cy.add({
-                group: 'nodes',
-                data: {id: node["id"], name: node["name"], parent: target.id(), classes: 'center-center'}
-              })
-            });
+          ref.getChildrenById(Number(target.id())).forEach((node) => {
+            const cat = ref.getEntityCategory(node);
+            cy.add({
+              group: 'nodes',
+              data: {id: node["id"], name: node["name"], parent: target.id(), classes: 'center-center', category: cat}
+            })
           })
           cy.elements().forEach(ele => {
             edgesParam.add(Number(ele.data().id));
           });
-          if (_this.type == 'target') {
-            _this.getRelationsByIdsTarget(edgesParam).then((res) => {
-              res.forEach(edge => {
+          if (ref.type == 'target') {
+            ref.getRelationsByIdsTarget(edgesParam).forEach((edge) => {
                   const cat = edge.category;
                   if (cat !== 'Contain' && cat !== 'Define') {
                     cy.add({
@@ -274,44 +309,42 @@ export default {
                     })
                   }
                 });
-            });
           }else{
-            _this.getRelationsByIds(edgesParam).then((res) => {
-              res.forEach(edge => {
-                const cat = _this.getRelationCategory(edge);
-                // console.log(cat)
-                  if (cat !== 'Contain' && cat !== 'Define') {
-                    cy.add({
-                    group: 'edges',
-                    data: {id: edge.id, source: String(edge["src"]), target: String(edge["dest"]), category: cat}
-                  })
-                }
-              });
+            ref.getRelationsByIds(edgesParam).forEach((edge) => {
+              const cat = ref.getRelationCategory(edge);
+              if (cat !== 'Contain' && cat !== 'Define') {
+                cy.add({
+                  group: 'edges',
+                  data: {id: edge.id, source: String(edge["src"]), target: String(edge["dest"]), category: cat}
+                })
+              }
             });
-          }          
-        let layout = cy.layout({
+          }
+          let layout = cy.layout({
             name: "fcose",
             fit: true,
             nodeRepulsion: 99999,
             randomize: true,
             animationDuration: 300,
             padding: 30,
-            nodeDimensionsIncludeLabels: false,
+            nodeDimensionsIncludeLabels: true,
             initialEnergyOnIncremental: 0.5,
             nestingFactor: 0.5,
-            spacingFactor: 2,
+            spacingFactor: 1.2,
+            avoidOverlap: true,
           })
           layout.run()
         }
       });
+      cy.center();
     },
-async getConfig() {
-      vscode.postMessage({
-        command: 'setConfig'
-      })
+    async getConfig() {
+          vscode.postMessage({
+            command: 'setConfig'
+          })
+        }
+      }
     }
-  }
-}
 </script>
 
 <style lang="scss" scoped>
@@ -325,7 +358,8 @@ async getConfig() {
 
 #network {
   width: 100%;
-  height: max(65vh, 800px);
+  //height: 100%;
+  height: max(80vh, 800px);
   overflow: auto;
   border: 1px solid #69f;
 }
