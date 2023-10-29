@@ -80,12 +80,18 @@ export default {
     },
     //目标模型的cell加一个判断类型，把父子节点的边不显现。
     getRelationsByIdsTarget(entityIds) {
+      console.log(this.packageList)
       const relations = []
       for (const cell of this.data["cells"]) {
+        // console.log('cell',cell)
         if (entityIds.has(cell["src"]) && entityIds.has(cell["dest"])) {
           let category='Relation'
           let cn=this.packageList.find(n=>n.id==cell["dest"]+'');
           if(cn.parentId==cell["src"]+''){
+            category='Contain'
+          }
+          let pn=this.packageList.find(n=>n.id==cell["src"]+'');
+          if(pn.parentId==cell["dest"]+''){
             category='Contain'
           }
           let c={src:cell["src"],dest:cell["dest"],category:category}
@@ -111,9 +117,12 @@ export default {
         } else {
           parentId = nameIdMap.get(variable.slice(0, variable.lastIndexOf("/")));
         }
+        var name=variable.split('/')
+        // console.log(name)
         resultList.push({
           "id": i + 1,
-          "name": variable,
+          "name": name[name.length-1],
+          "qualifyName":variable,
           "parentId": parentId,
         });
       });
@@ -279,8 +288,8 @@ export default {
       cy.center();
       cy.on('tap', 'node', function (evt) {
         let target = evt.target;
-        console.log("target: " + target);
-        console.dir(target);
+        // console.log("target: " + target);
+        // console.dir(target);
         if (target.selected()) {
           target.children().forEach(ele => {
             cy.remove(ele)
