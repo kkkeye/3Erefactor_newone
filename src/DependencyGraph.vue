@@ -1,8 +1,59 @@
 <template>
-  <div class="DependencyGraph">
-    <div id="network"></div>
+  <div class="DependencyGraph" style="position: relative;">
+    <div id="network" style="width: 100vw; height: 100vh;"></div>
+    <div style="position: fixed; left: 5%; bottom: 10px; display: flex; align-items: center;">
+      <div>
+        <input type="range" id="zoomSlider" min="0.5" max="2" step="0.01" value="1" class="zoom-slider">
+        <div id="zoomLabel" class="zoom-label">Zoom: 100%</div>
+      </div>
+      <button id="resetZoom" class="reset-zoom">Reset Zoom</button>
+    </div>
   </div>
 </template>
+
+<style>
+  .zoom-slider {
+    width: 100%;
+    height: 2px;
+    border-radius: 5px;
+    background: #ddd;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    position: relative;
+  }
+
+  .zoom-slider::-webkit-slider-thumb {
+    width: 10px;
+    height: 10px;
+    background: #86898c;
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-appearance: none;
+  }
+
+  .zoom-label {
+    text-align: center;
+    font-size: 10px;
+    margin-top: 2px;
+  }
+
+  .reset-zoom {
+    position: fixed;
+    bottom: 10px;
+    right: 2%;
+    background-color: #005fb8;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  
+  .reset-zoom:active {
+    transform: scale(0.95);
+  }
+</style>
 
 <script>
 import cytoscape from "cytoscape";
@@ -29,12 +80,12 @@ export default {
     // this.getEntity()
     // this.getConfig()
     this.configData={
-      "targetFilePath": "D:\\git\\refactor-service-test\\depends.con.json",
-        "projectRoot": "D:\\git\\refactor-service-test\\test\\depends",
+      "targetFilePath": "D:\\3Ere\\json-sample\\depends.enre.con.json",
+        "projectRoot": "D:\\3Ere\\depends",
         "projectName": "depends",
     }
     //dependency,target
-    this.type = 'target';
+    this.type = 'dependency';
     this.getEntity()
   },
   mounted() {
@@ -47,7 +98,7 @@ export default {
             this.configData = JSON.parse(message.configData);
             this.type = message.type;
             this.getEntity()
-            // this.getArchModelData()
+            this.getArchModelData()
             break;
           }
       }
@@ -76,11 +127,12 @@ export default {
           relations.push(cell);
         }
       }
+      // console.log("relations: ",relations);
       return relations;
     },
     //目标模型的cell加一个判断类型，把父子节点的边不显现。
     getRelationsByIdsTarget(entityIds) {
-      console.log(this.packageList)
+      // console.log(this.packageList)
       const relations = []
       for (const cell of this.data["cells"]) {
         // console.log('cell',cell)
@@ -164,6 +216,7 @@ export default {
       }
       const result = await axios.post('http://localhost:8888/extract/enre', params, config);
       this.data = result.data.data;
+      console.log(this.data);
       for (const variable of this.data["variables"]) {
         this.entityIdMap.set(variable["id"], variable);
         if (!this.parentIdMap.has(variable["parentId"])) {
@@ -222,8 +275,8 @@ export default {
           nodeDimensionsIncludeLabels: true,
           avoidOverlap: true,
         },
-        zoomingEnabled: false,
-        userZoomingEnabled: false,
+        zoomingEnabled: true,
+        userZoomingEnabled: true,
         maxZoom: 2,
         minZoom: 0.5,
         style: [
@@ -264,7 +317,10 @@ export default {
             selector: 'edge',
             style: {
               'label': 'data(category)',
-              'line-color': '#2B65EC'
+              'line-color': '#2B65EC',
+              'target-arrow-color': '#2B65EC',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier'
             }
           },
 
@@ -285,6 +341,33 @@ export default {
         ],
         elements: this.entityRoot,
       });
+      // 监听滑块变化并更新缩放级别
+      let zoomSlider = document.getElementById('zoomSlider');
+      let zoomLabel = document.getElementById('zoomLabel');
+      let resetZoomButton = document.getElementById('resetZoom');
+
+      function updateZoom() {
+        let zoomLevel = parseFloat(zoomSlider.value);
+        cy.zoom({ level: zoomLevel });
+        zoomLabel.textContent = `Zoom: ${Math.round(zoomLevel * 100)}%`;
+      }
+
+      function syncZoom() {
+        let zoomLevel = cy.zoom();
+        zoomSlider.value = zoomLevel;
+        zoomLabel.textContent = `Zoom: ${Math.round(zoomLevel * 100)}%`;
+      }
+
+      function resetZoom() {
+        cy.fit(); // 适应所有节点到视图
+      }
+
+      zoomSlider.value = cy.zoom();
+      syncZoom();
+      zoomSlider.addEventListener('input', updateZoom);
+      setInterval(syncZoom, 10); // 每 10 毫秒检查一次
+      resetZoomButton.addEventListener('click', resetZoom);
+
       cy.center();
       cy.on('tap', 'node', function (evt) {
         let target = evt.target;
@@ -308,27 +391,56 @@ export default {
           cy.elements().forEach(ele => {
             edgesParam.add(Number(ele.data().id));
           });
+
+          // 存储已存在的边的源和目标节点对
+          let existingEdgePairs = new Set();
+
+          // 添加现有图中边的源和目标节点对到集合中
+          cy.edges().forEach(edge => {
+              const source = edge.data().source;
+              const target = edge.data().target;
+              existingEdgePairs.add(`${source}-${target}`);
+          });
+
           if (ref.type == 'target') {
-            ref.getRelationsByIdsTarget(edgesParam).forEach((edge) => {
+              ref.getRelationsByIdsTarget(edgesParam).forEach((edge) => {
                   const cat = edge.category;
                   if (cat !== 'Contain' && cat !== 'Define') {
-                    cy.add({
-                      group: 'edges',
-                      data: { id: edge.id, source: String(edge["src"]), target: String(edge["dest"]), category: edge.category }
-                    })
+                      const source = String(edge["src"]);
+                      const target = String(edge["dest"]);
+                      const edgePair = `${source}-${target}`;
+                      // 检查源和目标节点对是否已存在
+                      if (!existingEdgePairs.has(edgePair)) {
+                          cy.add({
+                              group: 'edges',
+                              data: { id: edge.id, source, target, category: edge.category }
+                          });
+                          // 将新的边的源和目标节点对添加到集合中
+                          existingEdgePairs.add(edgePair);
+                      }
                   }
-                });
-          }else{
-            ref.getRelationsByIds(edgesParam).forEach((edge) => {
-              const cat = ref.getRelationCategory(edge);
-              if (cat !== 'Contain' && cat !== 'Define') {
-                cy.add({
-                  group: 'edges',
-                  data: {id: edge.id, source: String(edge["src"]), target: String(edge["dest"]), category: cat}
-                })
-              }
-            });
+              });
+          } else {
+              ref.getRelationsByIds(edgesParam).forEach((edge) => {
+                  const cat = ref.getRelationCategory(edge);
+                  if (cat !== 'Contain' && cat !== 'Define') {
+                      const source = String(edge["src"]);
+                      const target = String(edge["dest"]);
+                      const edgePair = `${source}-${target}`;
+                      // 检查源和目标节点对是否已存在
+                      if (!existingEdgePairs.has(edgePair)) {
+                          cy.add({
+                              group: 'edges',
+                              data: { id: edge.id, source, target, category: cat }
+                          });
+                          // 将新的边的源和目标节点对添加到集合中
+                          existingEdgePairs.add(edgePair);
+                      }
+                  }
+              });
           }
+          console.log("existingEdgePairs: ", existingEdgePairs);
+
           let layout = cy.layout({
             name: "fcose",
             fit: true,
